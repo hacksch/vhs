@@ -16,6 +16,9 @@ use TYPO3\CMS\Core\Database\Query\Restriction\HiddenRestriction;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractViewHelper;
+use TYPO3\CMS\Frontend\Page\PageRepository;
+use TYPO3\CMS\Core\Context\LanguageAspect;
+use TYPO3\CMS\Core\Context\Context;
 
 /**
  * Base class: Record Resource ViewHelpers
@@ -173,7 +176,7 @@ abstract class AbstractRecordResourceViewHelper extends AbstractViewHelper imple
 
         $queryBuilder->createNamedParameter($id, \PDO::PARAM_INT, ':id');
 
-        return $queryBuilder
+        $record = $queryBuilder
             ->select('*')
             ->from($table)
             ->where(
@@ -181,6 +184,44 @@ abstract class AbstractRecordResourceViewHelper extends AbstractViewHelper imple
             )
             ->execute()
             ->fetch() ?: null;
+
+        if (!$this->isDefaultLanguage()) {
+            if (TYPO3_MODE === 'FE') {
+                $pageRepository = $GLOBALS['TSFE']->sys_page;
+            } else {
+                $pageRepository = GeneralUtility::makeInstance(PageRepository::class);
+                $pageRepository->init(false);
+            }
+            /** @var PageRepository $pageRepository */
+            $localisation = $pageRepository->getRecordOverlay($table, $record, $this->getCurrentLanguageUid());
+
+            if (is_array($localisation)) {
+                $record = $localisation;
+            }
+        }
+
+        return $record;
+    }
+
+    /**
+     * @return integer
+     */
+    protected function getCurrentLanguageUid()
+    {
+        $languageUid = $GLOBALS['TSFE']->sys_language_uid;
+        if (class_exists(LanguageAspect::class)) {
+            $languageUid = GeneralUtility::makeInstance(Context::class)->getAspect('language')->getId();
+        }
+
+        return (integer) $languageUid;
+    }
+
+    /**
+     * @return boolean
+     */
+    protected function isDefaultLanguage()
+    {
+        return $this->getCurrentLanguageUid() === 0;
     }
 
     /**
